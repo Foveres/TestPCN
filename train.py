@@ -39,16 +39,13 @@ class FullModel(nn.Module):
 
     def forward(self, inputs, gt, eps, iters):
         # print(inputs) torch.Size([4, 3, 5000])
-        output1, output2, expansion_penalty = self.model(inputs) #
-        gt = gt[:, :, :3]
+        output1, expansion_penalty = self.model(inputs) #
+        gt = gt[:, :, :3]   # torch.Size([4, 8192, 3])
 
         dist, _ = self.EMD(output1, gt, eps, iters)
         emd1 = torch.sqrt(dist).mean(1)
 
-        dist, _ = self.EMD(output2, gt, eps, iters)
-        emd2 = torch.sqrt(dist).mean(1)
-
-        return output1, output2, emd1, emd2, expansion_penalty
+        return output1, emd1, expansion_penalty
 
 # 设置visdom查看训练结果
 vis = visdom.Visdom(port=8097, env=opt.env)  # set your port
@@ -90,7 +87,7 @@ len_dataset = len(dataset)
 print("Train Set Size: ", len_dataset)
 
 # 第二步：网络结构。新建网络、分布式训练、放到GPU上、权重初始化
-network = MSN(num_points=opt.num_points, n_primitives=opt.n_primitives)
+network = BasicNet(num_points=opt.num_points, n_primitives=opt.n_primitives)
 network = torch.nn.DataParallel(FullModel(network))
 network.cuda()
 network.module.model.apply(weights_init)  # initialization of the weight
@@ -133,12 +130,11 @@ for epoch in range(opt.nepoch):
         id, input, gt = data    # input torch.Size([8, 5000, 3])  gt torch.Size([8, 8192, 3])
         input = input.float().cuda()
         gt = gt.float().cuda()
-        input = input.transpose(2, 1).contiguous() # contiguous()相当于做了个深度拷贝修改一个值，另一个不改动。
+        input = input.transpose(2, 1).contiguous() # contiguous()相当于做了个深度拷贝修改一个值，另一个不改动。input torch.Size([8, 3, 5000])
 
-        output1, output2, emd1, emd2, expansion_penalty = network(input, gt.contiguous(), 0.005, 50)    # 数据输入网络 output1 torch.Size([8, 8192, 3]) output2  torch.Size([8, 8192, 3])
-        loss_net = emd1.mean() + emd2.mean() + expansion_penalty.mean() * 0.1       # 损失函数
+        output1, emd1, expansion_penalty = network(input, gt.contiguous(), 0.005, 50)    # 数据输入网络 output1 torch.Size([8, 8192, 3]) output2  torch.Size([8, 8192, 3])
+        loss_net = emd1.mean() +  expansion_penalty.mean() * 0.1       # 损失函数
         loss_net.backward()     # (损失的反向传播)
-        train_loss.update(emd2.mean().item())
         optimizer.step()        # (更新参数)
 
         if i % 10 == 0:
@@ -165,16 +161,9 @@ for epoch in range(opt.nepoch):
                             markersize=2,
                         ),
                         )
-            vis.scatter(X=output2[idx].data.cpu(),
-                        win='TRAIN_OUTPUT',
-                        opts=dict(
-                            title=id[idx],
-                            markersize=2,
-                        ),
-                        )
 
-        print(opt.env + ' train [%d: %d/%d]  emd1: %f emd2: %f expansion_penalty: %f' % (
-        epoch, i, len_dataset / opt.batchSize, emd1.mean().item(), emd2.mean().item(), expansion_penalty.mean().item()))
+        print(opt.env + ' train [%d: %d/%d]  emd1: %f expansion_penalty: %f' % (
+        epoch, i, len_dataset / opt.batchSize, emd1.mean().item(), expansion_penalty.mean().item()))
     train_curve.append(train_loss.avg)
 
     # VALIDATION
@@ -187,8 +176,8 @@ for epoch in range(opt.nepoch):
                 input = input.float().cuda()
                 gt = gt.float().cuda()
                 input = input.transpose(2, 1).contiguous()
-                output1, output2, emd1, emd2, expansion_penalty = network(input, gt.contiguous(), 0.004, 3000)
-                val_loss.update(emd2.mean().item())
+                output1, emd1, expansion_penalty = network(input, gt.contiguous(), 0.004, 3000)
+                val_loss.update(emd1.mean().item())
                 idx = random.randint(0, input.size()[0] - 1)
                 vis.scatter(X=gt.contiguous()[idx].data.cpu()[:, :3],
                             win='VAL_GT',
@@ -212,15 +201,8 @@ for epoch in range(opt.nepoch):
                                 markersize=2,
                             ),
                             )
-                vis.scatter(X=output2[idx].data.cpu(),
-                            win='VAL_OUTPUT',
-                            opts=dict(
-                                title=id[idx],
-                                markersize=2,
-                            ),
-                            )
-                print(opt.env + ' val [%d: %d/%d]  emd1: %f emd2: %f expansion_penalty: %f' % (
-                epoch, i, len_dataset / opt.batchSize, emd1.mean().item(), emd2.mean().item(),
+                print(opt.env + ' val [%d: %d/%d]  emd1: %f expansion_penalty: %f' % (
+                epoch, i, len_dataset / opt.batchSize, emd1.mean().item(),
                 expansion_penalty.mean().item()))
 
     val_curve.append(val_loss.avg)

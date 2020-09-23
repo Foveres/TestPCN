@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="WebServers">
+    <option name="servers">
+      <webServer id="11500d6f-4f95-4626-930e-868828532396" name="TestPCN" url="http://124.16.75.226">
+        <fileTransfer host="124.16.75.226" port="6138" accessType="SFTP">
+          <advancedOptions>
+            <advancedOptions dataProtectionLevel="Private" passiveMode="true" shareSSLContext="true" />
+          </advancedOptions>
+          <option name="port" value="6138" />
+        </fileTransfer>
+      </webServer>
+    </option>
+  </component>
+</project>

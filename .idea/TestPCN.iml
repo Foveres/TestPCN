@@ -7,7 +7,7 @@
       <sourceFolder url="file://$MODULE_DIR$/MDS" isTestSource="false" />
       <excludeFolder url="file://$MODULE_DIR$/venv" />
     </content>
-    <orderEntry type="inheritedJdk" />
+    <orderEntry type="jdk" jdkName="(learn)gpt@124.16.75.226:6138)" jdkType="Python SDK" />
     <orderEntry type="sourceFolder" forTests="false" />
   </component>
   <component name="TestRunnerService">
