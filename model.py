@@ -135,7 +135,7 @@ class PointNetRes(nn.Module):
 
 
 class BasicNet(nn.Module):
-    def __init__(self, num_points=8192, bottleneck_size=1024, n_primitives=12):
+    def __init__(self, num_points=8192, bottleneck_size=1024, n_primitives=16):
         super(BasicNet, self).__init__()
         self.num_points = num_points  # 8192
         self.bottleneck_size = bottleneck_size  # 1024
@@ -155,7 +155,7 @@ class BasicNet(nn.Module):
         partial = x  # x：torch.Size([4, 3, 5000])
         x = self.encoder(x)  # 输出的x：[4,1024]
         outs = []
-        for i in range(0, self.n_primitives):  # 【K的值0-15】
+        for i in range(0, self.n_primitives):  # 【K的值0-15】self.n_primitives
             rand_grid = Variable(torch.cuda.FloatTensor(x.size(0), 2,
                                                         self.num_points // self.n_primitives))  # rand_grid创建了一个[4,2,512],4个2*512矩阵，值为0
             rand_grid.data.uniform_(0, 1)  # 这个就是个初始化，uniform_指的是均匀分布。使这个值在0-1间均匀分布
@@ -174,20 +174,3 @@ class BasicNet(nn.Module):
         loss_mst = torch.mean(dist)
 
         return out1, loss_mst  # out1：torch.Size([4, 8192, 3])；  tout2：orch.Size([4, 8192, 3])
-
-class MyNet(nn.Module):
-    def __init__(self,num_points=8192, bottleneck_size=1024, n_primitives=12):
-        super(MyNet, self).__init__()
-        self.num_points = num_points  # 8192
-        self.bottleneck_size = bottleneck_size  # 1024
-        self.n_primitives = n_primitives  # 16
-        self.full_net=nn.Sequential(
-            BasicNet(12),
-            BasicNet(14),
-            BasicNet(16),
-        )
-
-    def forward(self, x):
-        partial = x                 # x：torch.Size([4, 3, 5000])
-        x = self.full_net(x)
-        pass

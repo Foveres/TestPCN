@@ -32,20 +32,29 @@ print(opt)
 
 
 class FullModel(nn.Module):
-    def __init__(self, model):
+    def __init__(self, model1, model2, model3):
         super(FullModel, self).__init__()
-        self.model = model # MSN 网络模型
+        self.model_1 = model1 # MSN 网络模型
+        self.model_2 = model2 # MSN 网络模型
+        self.model_3 = model3 # MSN 网络模型
         self.EMD = emd.emdModule()
 
-    def forward(self, inputs, gt, eps, iters):
-        # print(inputs) torch.Size([4, 3, 5000])
-        output1, expansion_penalty = self.model(inputs) #
-        gt = gt[:, :, :3]   # torch.Size([4, 8192, 3])
+    def forward(self, inputs, gt, eps, iters):  # torch.Size([4, 3, 5000]) torch.Size([4, 8192, 3])
+        output1, expansion_penalty_1 = self.model_1(inputs)     # 5000——6144 torch.Size([4, 6120, 3])
+        output2, expansion_penalty_2 = self.model_2(output1.transpose(1, 2))    # 6144——7168 torch.Size([4, 7168, 3])
+        output3, expansion_penalty_3 = self.model_3(output2.transpose(1, 2))    # 7168——8192 torch.Size([4, 8192, 3])
+        gt3 = gt[:, :, :3]   # torch.Size([4, 8192, 3])
 
         dist, _ = self.EMD(output1, gt, eps, iters)
         emd1 = torch.sqrt(dist).mean(1)
 
-        return output1, emd1, expansion_penalty
+        dist, _ = self.EMD(output2, gt, eps, iters)
+        emd2 = torch.sqrt(dist).mean(1)
+
+        dist, _ = self.EMD(output3, gt3, eps, iters)
+        emd3 = torch.sqrt(dist).mean(1)
+
+        return output1, emd1, expansion_penalty_1, output2, emd2, expansion_penalty_2, output3, emd3, expansion_penalty_3
 
 # 设置visdom查看训练结果
 vis = visdom.Visdom(port=8097, env=opt.env)  # set your port
@@ -87,24 +96,28 @@ len_dataset = len(dataset)
 print("Train Set Size: ", len_dataset)
 
 # 第二步：网络结构。新建网络、分布式训练、放到GPU上、权重初始化
-network = BasicNet(num_points=opt.num_points, n_primitives=opt.n_primitives)
-network = torch.nn.DataParallel(FullModel(network))
+network1 = BasicNet(num_points=6124,n_primitives=12)
+network2 = BasicNet(num_points=7168,n_primitives=14)
+network3 = BasicNet(num_points=8192,n_primitives=16)
+network = torch.nn.DataParallel(FullModel(network1,network2,network3))
 network.cuda()
-network.module.model.apply(weights_init)  # initialization of the weight
+network.apply(weights_init)  # initialization of the weight
 
 # 如果默认模型是空
 if opt.model != '':
-    network.module.model.load_state_dict(torch.load(opt.model))
+    # network.module.model.load_state_dict(torch.load(opt.model))
+    network.load_state_dict(torch.load(opt.model))
     print("Previous weight loaded ")
 
 # 第四步：优化器，参数有网络的参数和learning rate
 lrate = 0.001  # learning rate
-optimizer = optim.Adam(network.module.model.parameters(), lr=lrate)
+optimizer = optim.Adam(network.parameters(), lr=lrate)
 
 train_loss = AverageValueMeter()
 val_loss = AverageValueMeter()
 with open(logname, 'a') as f:  # open and append
-    f.write(str(network.module.model) + '\n')
+    # f.write(str(network.module.model) + '\n')
+    f.write(str(network) + '\n')
 
 train_curve = []
 val_curve = []
@@ -117,13 +130,15 @@ labels_generated_points = labels_generated_points.contiguous().view(-1)
 for epoch in range(opt.nepoch):
     # TRAIN MODE
     train_loss.reset()
-    network.module.model.train()  # 使用在训练时：启用 BatchNormalization 和 Dropout
+    # network.module.model.train()  # 使用在训练时：启用 BatchNormalization 和 Dropout
+    network.train()
 
     # learning rate schedule
     if epoch == 20:
-        optimizer = optim.Adam(network.module.model.parameters(), lr=lrate / 10.0)
+        # optimizer = optim.Adam(network.module.model.parameters(), lr=lrate / 10.0)
+        optimizer = optim.Adam(network.parameters(), lr=lrate / 10.0)
     if epoch == 40:
-        optimizer = optim.Adam(network.module.model.parameters(), lr=lrate / 100.0)
+        optimizer = optim.Adam(network.parameters(), lr=lrate / 100.0)
 
     for i, data in enumerate(dataloader, 0):
         optimizer.zero_grad()   # 梯度清0
@@ -228,4 +243,4 @@ for epoch in range(opt.nepoch):
         f.write('json_stats: ' + json.dumps(log_table) + '\n')
 
     print('saving net...')
-    torch.save(network.module.model.state_dict(), '%s/network.pth' % (dir_name))
+    torch.save(network.state_dict(), '%s/network.pth' % (dir_name))
